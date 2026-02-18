@@ -796,7 +796,12 @@ require('lazy').setup({
         --    https://github.com/pmizio/typescript-tools.nvim
         --
         -- But for many setups, the LSP (`ts_ls`) will work just fine
-        ts_ls = {},
+        ts_ls = {
+          on_attach = function(client)
+            client.server_capabilities.documentFormattingProvider = false
+            client.server_capabilities.documentRangeFormattingProvider = false
+          end,
+        },
         --
 
         lua_ls = {
@@ -866,32 +871,102 @@ require('lazy').setup({
         desc = '[F]ormat buffer',
       },
     },
-    opts = {
-      notify_on_error = false,
-      format_on_save = function(bufnr)
-        -- Disable "format_on_save lsp_fallback" for languages that don't
-        -- have a well standardized coding style. You can add additional
-        -- languages here or re-enable it for the disabled ones.
-        local disable_filetypes = { c = true, cpp = true }
-        if disable_filetypes[vim.bo[bufnr].filetype] then
-          return nil
-        else
+    opts = function()
+      local eslint_files = {
+        '.eslintrc',
+        '.eslintrc.js',
+        '.eslintrc.cjs',
+        '.eslintrc.json',
+        'eslint.config.js',
+        'eslint.config.cjs',
+        'package.json',
+      }
+
+      local function has_eslint_config(ctx)
+        local match = vim.fs.find(eslint_files, { path = ctx.filename, upward = true })
+        return match[1] ~= nil
+      end
+
+      local function resolve_eslint_command(ctx)
+        local filename = ctx and ctx.filename or vim.api.nvim_buf_get_name(0)
+        local match = vim.fs.find('node_modules/.bin/eslint', { path = filename, upward = true })
+        return match[1] or 'eslint'
+      end
+
+      local function resolve_eslint_local(ctx)
+        local filename = ctx and ctx.filename or vim.api.nvim_buf_get_name(0)
+        local match = vim.fs.find('node_modules/.bin/eslint', { path = filename, upward = true })
+        return match[1]
+      end
+
+      local function can_run(cmd)
+        return vim.fn.executable(cmd) == 1
+      end
+
+      return {
+        notify_on_error = false,
+        format_on_save = function(bufnr)
+          -- Disable "format_on_save lsp_fallback" for languages that don't
+          -- have a well standardized coding style. You can add additional
+          -- languages here or re-enable it for the disabled ones.
+          local disable_filetypes = { c = true, cpp = true }
+          local no_lsp_fallback = {
+            javascript = true,
+            javascriptreact = true,
+            typescript = true,
+            typescriptreact = true,
+          }
+          local filetype = vim.bo[bufnr].filetype
+
+          if disable_filetypes[filetype] then
+            return nil
+          end
+
           return {
             timeout_ms = 500,
-            lsp_format = 'fallback',
+            lsp_format = no_lsp_fallback[filetype] and 'never' or 'fallback',
           }
-        end
-      end,
-      formatters_by_ft = {
-        lua = { 'stylua' },
-        -- Conform can also run multiple formatters sequentially
-        -- python = { "isort", "black" },
-        --
-        -- You can use 'stop_after_first' to run the first available formatter from the list
-        javascript = { 'prettierd', 'prettier', stop_after_first = true },
-        typescript = { 'prettierd', 'prettier', stop_after_first = true },
-      },
-    },
+        end,
+        formatters = {
+          eslint_d = {
+            condition = function(ctx)
+              return has_eslint_config(ctx) and can_run 'eslint_d'
+            end,
+            command = 'eslint_d',
+            args = { '--fix', '--stdin', '--stdin-filename', '$FILENAME' },
+            stdin = true,
+          },
+          eslint_local = {
+            condition = function(ctx)
+              local cmd = resolve_eslint_local(ctx)
+              return has_eslint_config(ctx) and cmd and can_run(cmd)
+            end,
+            command = resolve_eslint_local,
+            args = { '--fix', '--stdin', '--stdin-filename', '$FILENAME' },
+            stdin = true,
+          },
+          eslint_global = {
+            condition = function(ctx)
+              return has_eslint_config(ctx) and can_run 'eslint'
+            end,
+            command = 'eslint',
+            args = { '--fix', '--stdin', '--stdin-filename', '$FILENAME' },
+            stdin = true,
+          },
+        },
+        formatters_by_ft = {
+          lua = { 'stylua' },
+          -- Conform can also run multiple formatters sequentially
+          -- python = { "isort", "black" },
+          --
+          -- You can use 'stop_after_first' to run the first available formatter from the list
+          javascript = { 'eslint_d', 'eslint_local', 'eslint_global', 'prettierd', 'prettier', stop_after_first = true },
+          javascriptreact = { 'eslint_d', 'eslint_local', 'eslint_global', 'prettierd', 'prettier', stop_after_first = true },
+          typescript = { 'eslint_d', 'eslint_local', 'eslint_global', 'prettierd', 'prettier', stop_after_first = true },
+          typescriptreact = { 'eslint_d', 'eslint_local', 'eslint_global', 'prettierd', 'prettier', stop_after_first = true },
+        },
+      }
+    end,
   },
 
   { -- Autocompletion
@@ -1000,18 +1075,16 @@ require('lazy').setup({
     -- If you want to see what colorschemes are already installed, you can use `:Telescope colorscheme`.
     'folke/tokyonight.nvim',
     priority = 1000, -- Make sure to load this before all the other start plugins.
+  },
+  {
+    'Mofiqul/dracula.nvim',
+    priority = 1000, -- Make sure to load this before all the other start plugins.
     config = function()
       ---@diagnostic disable-next-line: missing-fields
-      require('tokyonight').setup {
-        styles = {
-          comments = { italic = false }, -- Disable italics in comments
-        },
-      }
+      require('dracula').setup {}
 
       -- Load the colorscheme here.
-      -- Like many other themes, this one has different styles, and you could load
-      -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
-      vim.cmd.colorscheme 'tokyonight-night'
+      vim.cmd.colorscheme 'dracula'
     end,
   },
 
