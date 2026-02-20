@@ -208,6 +208,15 @@ vim.keymap.set('n', '<C-k>', '<C-w><C-k>', { desc = 'Move focus to the upper win
 -- Shortcut for :tabnew
 vim.keymap.set('n', '<leader>t', ':tabnew<CR>', { desc = 'Open new tab' })
 
+-- Git: diff current branch vs dev, one tab per file (vim-fugitive)
+vim.keymap.set('n', '<leader>gd', function()
+  local base = vim.fn.input('Diff vs branch: ', 'dev')
+  if base == nil or base == '' then
+    return
+  end
+  vim.cmd('Git difftool -y ' .. base .. '..HEAD')
+end, { desc = 'Git diff vs dev' })
+
 -- NOTE: Some terminals have colliding keymaps or are not able to send distinct keycodes
 -- vim.keymap.set("n", "<C-S-h>", "<C-w>H", { desc = "Move window to the left" })
 -- vim.keymap.set("n", "<C-S-l>", "<C-w>L", { desc = "Move window to the right" })
